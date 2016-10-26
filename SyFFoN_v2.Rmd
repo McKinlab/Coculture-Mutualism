@@ -10,6 +10,7 @@ geometry: margin=2.54cm
 
 ## Overview
 Monod model that explores interactions between Esherichia coli and Rhodopseudomonas palustris. Under anaerobic conditions, glucose is consumed by E. coli and converts some of this to fermentation byproducts, which serve as a carbon source for R. palustris. In turn, R. palustris fixes atmospheric nitrogen gas, which is converted into ammonium and serves as E. coli's sole source of nitrogen. The following attempts to captures these basic features using a set of coupled differential equations.
+This model was used in: http://biorxiv.org/content/early/2016/10/25/083386
 This model differs from that presented in LaSarre et al. 2016. ISME J. in the following ways:
 
 (i) a sigmoidal function, rather than a Monod function, is used control the transition to growth-independent fermentation by E. coli; (10/(10+1.09^(1000*uEc)))
