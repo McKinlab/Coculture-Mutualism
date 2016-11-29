@@ -81,7 +81,7 @@ parms <- c(
            Rf = 8*10^-9,# mM glucose converted to formate per E. coli cell/ml (umol/cell) 
            Re = 4.5*10^-9,# mM glucose converted to EtOH per E. coli cell/ml (umol/cell) 
            Rco2= 5*10^-10, # mM glucose converted to CO2 per E. coli cell/ml (umol/cell) 
-           Ra = 1.5*10^-9, # mM N2 converted to NH4+ per R. palustris Nx cell/ml (umol/Nx cell)
+           Ra = 0.15*10^-9, # mM N2 converted to NH4+ per R. palustris Nx cell/ml (umol/Nx cell)
            RhRp = 2*10^-9, # mM H2 produced per R. palustris cell/ml; (umol/cell)
            RhEc = 5*10^-9, # mM H2 produced per E. coli cell/ml; (umol/cell)
            rc = 300*10^-11, # mM glucose converted to organic acids per E. coli cell/ml per h in the absence of growth (umol/cell/h)
