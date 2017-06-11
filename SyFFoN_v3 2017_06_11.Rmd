@@ -1,0 +1,163 @@
+---
+title: "R. palustris- E. coli mutualistic Model with N2 limitation and competition between species for excreted ammonium"
+authors: "James B. McKinlay"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin=2.54cm
+---
+
+## Overview
+Simulation model that explores interactions between Esherichia coli and Rhodopseudomonas palustris. Under anaerobic conditions, glucose is consumed by E. coli and converts some of this to fermentation byproducts, which serve as a carbon source for R. palustris. In turn, R. palustris fixes atmospheric nitrogen gas, which is converted into ammonium and serves as E. coli's sole source of nitrogen. The following attempts to captures these basic features using a set of coupled differential equations.
+This model differs from that presented in McCully et al 2017 in the equation for dAdt (change in ammonium/h):
+dAdt <- (Rp*uRp*Fa)*(1-(40/(40+1.29^N))) - (uRp*Rp/Yar)*(A/(Kar+A)) - (uEc*Ec/Ya)
+
+which now allosws for R. palustris to take up ammonium in addition to producing it.
+
+## Set working directory
+```{r}
+rm(list=ls()) # clears your working directory
+getwd() # tells you your current working directory
+setwd("~/GitHub/Task3") # sets your working directory
+```
+
+## Install packages
+```{r}
+install.packages("deSolve") # run this first time
+require("deSolve") # installs any dependencies
+```
+
+## Mutualism function
+```{r}
+mutfun <- function(times, y, parms) {
+  with(as.list(c(y, parms)), { 
+    uEc <- uEcMax*(G/(Kg+G))*(A/(Ka+A))*(bEc/(bEc+10^(f+C))) # E. coli growth rate
+    uRpn <- uRpMax*(N/(Kn+N))*(C/(Kc+C))*(bRp/(bRp+10^(f+C))) # R. palustris growth rate
+    uRpa <- uRpMax2*(A/(Kar+A))*(C/(Kc+C))*(bRp/(bRp+10^(f+C)))
+    uRp = uRpn + uRpa
+    dGdt <- -uEc*Ec/Yg - (uEc*Ec*(Fc+Ff+Fe+Fco2)) - Ec*(G/(Kg+G))*(10/(10+1.09^(1000*uEc)))*(bEc/(bEc+10^(f+C)))*((100/(100+6^C))*(rc+rf+re+rco2)+rc_mono+rf_mono+re_mono+rco2_mono) # change in glucose (mM/h); 
+    dNdt <- -(uRp*Rp*0.5*Fa)*(1-(40/(40+1.29^N))) -(uRp*Rp/Yn) # change in N2 (mM N2/h; 0.5 accounts for half an N2 consumed for every NH4+ made)
+    dCdt <- Ec*uEc*Fc*2 + Ec*2*(G/(Kg+G))*(10/(10+1.09^(1000*uEc)))*(bEc/(bEc+10^(f+C)))*(rc*(100/(100+6^C))+rc_mono) - (uRp*Rp/Yc) - 0.25*Rp*uRp*FhRp - 0.25*Rp*rHp*(C/(Kc+C))*(40/(40+1.29^N))*(bRp/(bRp+10^(f+C))) # change in organic acids except formate (mM/h); 0.25 takes into account both electrons sent to H2 and accomanying carbon to CO2
+    dFdt <- (Ec*uEc*Ff*6) + Ec*6*(G/(Kg+G))*(10/(10+1.09^(1000*uEc)))*(bEc/(bEc+10^(f+C)))*(rf*(100/(100+6^C)) + rf_mono) # change in formate (mM/h) # set feedback term to ^C, otherwise is cuts off formate production even when C is fully consumed; do the same for other compounds
+    
+    dAdt <- (Rp*uRp*Fa)*(1-(40/(40+1.29^N))) - (uRp*Rp/Yar)*(A/(Kar+A)) - (uEc*Ec/Ya) # change in NH4+ (mM/h) 
+    dEcdt <- uEc*Ec  # change in E. coli (cells/ml/h)
+    dRpdt <- uRp*Rp   # R. palustris (cells/ml/h)
+    
+    dedt <- Ec*uEc*Fe*3 + Ec*3*(G/(Kg+G))*(10/(10+1.09^(1000*uEc)))*(bEc/(bEc+10^(f+C)))*(re*(100/(100+6^C))+re_mono) # change in ethanol (mM/h)
+    dCO2dt <- (Ec*uEc*Fco2*6) + Ec*6*(G/(Kg+G))*(10/(10+1.09^(1000*uEc)))*(bEc/(bEc+10^(f+C)))*(rco2*(100/(100+6^C))+rco2_mono) + Rp*uRp*FhRp*0.5 + Rp*rHp*(C/(Kc+C))*(40/(40+1.29^N))*(bRp/(bRp+10^(f+C)))*0.5 #change in CO2 (mM/h; concentration assumes all CO2 is dissolved)  ; 0.5 CO2 made per H2 based on Rpal resting cell values from JBC paper
+    dHdt <- Rp*uRp*FhRp + Rp*rHp*(C/(Kc+C))*(40/(40+1.29^N))*(bRp/(bRp+10^(f+C)))+ Ec*uEc*FhEc + Ec*(G/(Kg+G))*(10/(10+1.09^(1000*uEc)))*(bEc/(bEc+10^(f+C)))*(rH*(100/(100+6^C))+rH_mono) #change in H2 (mM/h; concentration assumes all H2 is dissolved) 
+    return(list(c(dGdt, dNdt, dCdt, dFdt, dAdt, dEcdt, dRpdt, dedt, dCO2dt, dHdt))) 
+  })
+}
+```
+
+## Parameters and initial conditions
+```{r}
+# Parameters
+parms <- c(
+           uEcMax = 0.28, # E. coli max growth rate (h^-1)
+           uRpMax = 0.0772, # R. palustris max growth rate (h^-1)
+           uRpMax2 = 0.0152, # boost in Rpal growth rate in presence of NH4+
+           Yg = 8*10^7, # Ec growth yield (cells/umol glucose consumed; cells per ml / mM glucose consumed
+           Yn = 5*10^8, # R. palustris growth yield (cells/umol N2 consumed; cells per ml / mM N2 consumed; concentration assumes all N2 is dissolved)
+           Yc = 2.5*10^8, #1.6 R. palustris growth yield on organic acids (cells/umol Oacs consumed; cells per ml / mM Oacs consumed) 
+           Ya = 1*10^9, # E. coli growth yield on NH4+ (cells/umol NH4+ consumed; cells per ml / mM NH4+ consumed)
+           Yar = 5*10^8, # R. palustris growth yield on NH4+ (cells/umol NH4+ consumed; cells per ml / mM NH4+ consumed) # need to verify
+           Kg = 0.02, # half saturation constant for glucose (mM; Buhr et al 1992 J Biol Chem 267:3847-51)
+           Kc = 0.01, # half saturation constatnt for organic acids (mM; assumed)
+           Kn = 6, # half saturation constant for N2 (0.1 mM; Burns et al. 1972 Methods Enzymol 24:480-496) (fitting a MM curve against Ali's data suggests Kn should be more like 6)
+           Ka = 0.01, # Ec half saturation constant for NH4+ (mM; Khademi et al. 2004 Science 305:1587-1594)
+          Kar = 0.01, # Rp half saturation constant for NH4+ (assumed)
+           Fc = 1.9*10^-8, #3 mM glucose converted to succinate, acetate, and lactate per E. coli cell/ml (umol/cell)
+           Ff = 8*10^-9,# 10mM glucose converted to formate per E. coli cell/ml (umol/cell) 
+           Fe = 4.5*10^-9,# 10mM glucose converted to EtOH per E. coli cell/ml (umol/cell) 
+           Fco2= 5*10^-10, # mM glucose converted to CO2 per E. coli cell/ml (umol/cell) 
+           Fa = 1.50E-10, #0.0015*10^-9 #.15 mM N2 converted to NH4+ per R. palustris Nx cell/ml (umol/Nx cell); changed from 0.15*10^-9 to compensate for the effect of having Fa multiplied by cell densities# increasing Fa can overcome the effects of a poor Ecoli affinity for NH4+
+           FhRp = 2*10^-9, #2.6, 1.5   mM H2 produced per R. palustris cell/ml; (umol/cell)
+           FhEc = 5*10^-9, #0.5,  mM H2 produced per E. coli cell/ml; (umol/cell)
+           rc = 300*10^-11, # mM glucose converted to organic acids / cell/ml per h in the absence of growth (umol/cell/h)
+          rc_mono = 1.2*10^-11, # div by 2 since not being doubled by Rpal pull anymore; scaled up by 1.1 to account for new sigmoidal function that only achieves 0.9 x a max value
+           rf = 47*10^-11,# mM glucose converted to formate / cell/ml per h in the absence of growth (umol/cell/h)
+          rf_mono = 0.83*10^-11, # 0.83
+           re = 15*10^-11, # mM glucose converted to ethanol / cell/ml per h in the absence of growth (umol/cell/h)
+          re_mono = 0.5*10^-11,
+           rco2 = 2*10^-11, # mM glucose converted to CO2 / cell/ml per h in the absence of growth (umol/cell/h)
+          rco2_mono = 1.3*10^-11,
+           rH = 2*10^-11, # mM H2 / E. coli cell / ml in the absence of growth (umol/cell/h)
+           rHp = 10*10^-10,# mM H2 / R. palustris cell / ml in the absence of growth (umol/cell/h)
+           rH_mono = 0.83*10^-11,
+           ng = 0.2, # factor used to shift between growing and nongrowing production rates (Ec)
+           ngp = 0.01, # factor used to shift between growing and nongrowing production rates (Rp)
+           bEc = 1*10^43, # resistance of E. coli to acid; reflects medium buffering
+           bRp = 1*10^32) # resistance of R. palustris to acid; reflects medium buffering
+# initial concentrations below
+init <- c( 
+          G = 25, # Glucose (mM)  
+          N = 70, # N2 (mM) 
+          C = 0, # Consumable organic acids (mM)
+          f = 0, # Formate (mM)
+          A = 0.00005, # NH4+ (mM) (simulates small amount from ammonium molybdate)
+          Ec = 4000000, # E. coli (cells/ml)
+          Rp = 36000000, # R. palustris (cells/ml)
+          e = 0, #ethanol (mM)
+          CO2 = 0, #CO2 (mM)
+          H = 0) #H2 (mM)
+          # Time range and time step
+Tmax = 300 # hours
+TimeStep = 1 #hours
+Time = seq(0, Tmax, by = TimeStep)
+```
+
+## Output
+```{r}
+out <-  ode(y = init, times = Time, func = mutfun, parms = parms, method = "lsode")
+#head(out) # prints first 6 time points
+tail(out) # prints last 6 time points
+write.csv(out, file = "out.csv") # creates comma-delimited file that can be pasted into spreadsheet for graphing
+```
+
+## Plotting
+```{r}
+plot(out[,1], out[,7], xlab = "time (hr)", ylab = "Ecoli", type = "l", las = 1, 
+     col = "gold", lwd = 4, ylim = c(0, 1*max(out[,7]))) # plot E. coli biomass
+par(new=T)
+plot(out[,1], out[,8], xlab="", ylab ="", type = "l",las = 1,
+     col = "purple", ylim=c(0,1.2*max(out[,8])) )
+axis(4, ylim=c(0,1.2*max(out[,8])), lwd=2, line=3.5)
+mtext(4, text="Rpal", line=5.5)
+
+par(new=T)
+plot(out[,1], out[,4], xlab="", ylab ="",  type = "l",las = 1,
+     col = "green", ylim=c(0,1.3*max(out[,4])) )
+axis(4, ylim=c(0,1.2*max(out[,4])), lwd=2, line=3.5)
+mtext(4, text="Oacs", line=5.5)
+
+par(new=T)
+plot(out[,1], out[,6], xlab="", ylab ="",  type = "l",las = 1,
+   col = "blue", ylim=c(0,1.3*max(out[,6])) )
+axis(4, ylim=c(0,0.1*max(out[,4])), lwd=2, line=3.5)
+mtext(4, text="NH4+", line=5.5)
+
+par(new=T)
+plot(out[,1], out[,2], xlab="", ylab ="",  type = "l",las = 1,
+     col = "black", ylim=c(0,1.4*max(out[,2])) )
+axis(4, ylim=c(0,1.2*max(out[,2])), lwd=2, line=3.5)
+mtext(4, text="glucose", line=5.5)
+
+par(new=T)
+plot(out[,1], out[,5], xlab="", ylab ="",  type = "l",las = 1,
+     col = "gray", ylim=c(0,1.2*max(out[,5])) )
+axis(4, ylim=c(0,1.2*max(out[,5])), lwd=2, line=3.5)
+mtext(4, text="formate", line=5.5)
+
+par(new=T)
+plot(out[,1], out[,10], xlab="", ylab ="",  type = "l",las = 1,
+     col = "red", ylim=c(0,1*max(out[,10])) )
+axis(4, ylim=c(0,1.2*max(out[,10])), lwd=2, line=3.5)
+mtext(4, text="H2", line=5.5)
+
+#points(out[,1], out[,7], type = "l", col = "purple", lwd = 4)
+#points(out[,1], out[,2], type = "l", col = "green", lwd = 4)
+```
