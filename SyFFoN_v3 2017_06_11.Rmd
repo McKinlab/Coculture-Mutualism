@@ -79,16 +79,16 @@ parms <- c(
            FhRp = 2*10^-9, # mM H2 produced per R. palustris cell/ml; (umol/cell)
            FhEc = 5*10^-9, #  mM H2 produced per E. coli cell/ml; (umol/cell)
            rc = 300*10^-11, # mM glucose converted to organic acids / cell/ml per h in the absence of growth (umol/cell/h)
-          rc_mono = 1.2*10^-11, # div by 2 since not being doubled by Rpal pull anymore; scaled up by 1.1 to account for new sigmoidal function that only achieves 0.9 x a max value
+          rc_mono = 1.2*10^-11, # basal rate of mM glucose converted to organic acids per E. coli cell/ml/h in the absence of growth, e.g., in E.coli monoculture (umol/cell/h)
            rf = 47*10^-11,# mM glucose converted to formate / cell/ml per h in the absence of growth (umol/cell/h)
-          rf_mono = 0.83*10^-11, # 
+          rf_mono = 0.83*10^-11, # basal rate of mM glucose converted to formate per E. coli cell/ml/h in the absence of growth, e.g., in E.coli monoculture (umol/cell/h)
            re = 15*10^-11, # mM glucose converted to ethanol / cell/ml per h in the absence of growth (umol/cell/h)
-          re_mono = 0.5*10^-11,
+          re_mono = 0.5*10^-11, # basal rate of mM glucose converted to ethanol per E. coli cell/ml/h in the absence of growth, e.g., in E.coli monoculture (umol/cell/h)
            rco2 = 2*10^-11, # mM glucose converted to CO2 / cell/ml per h in the absence of growth (umol/cell/h)
-          rco2_mono = 1.3*10^-11,
+          rco2_mono = 1.3*10^-11, # basal rate of mM glucose converted to CO2 per E. coli cell/ml/h in the absence of growth, e.g., in E.coli monoculture (umol/cell/h)
            rH = 2*10^-11, # mM H2 / E. coli cell / ml in the absence of growth (umol/cell/h)
            rHp = 10*10^-10,# mM H2 / R. palustris cell / ml in the absence of growth (umol/cell/h)
-           rH_mono = 0.83*10^-11,
+           rH_mono = 0.83*10^-11, # basal rate of mM glucose converted to H2 per E. coli cell/ml/h in the absence of growth, e.g., in E.coli monoculture (umol/cell/h)
            bEc = 1*10^43, # resistance of E. coli to acid
            bRp = 1*10^32) # resistance of R. palustris to acid
 # initial concentrations below
