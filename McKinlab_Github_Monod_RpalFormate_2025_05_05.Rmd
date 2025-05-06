@@ -1,0 +1,105 @@
+---
+title: "McKinlab_Github_Monod_RpalFormate_2025_05.Rmd"
+output: html_document
+date: "2025-05-05"
+author: "James 'Jake' B. McKinlay
+---
+
+## Overview
+Monod model to test how the relationship between the formate oxidation rate and CO2-fixation rate affects culture growth.
+Also used to test the effect of the initial CO2 concentration
+Model assumes that reductant from formate oxidation (XH) can be discarded or stored
+More information is available at: 
+
+## Set working directory
+```{r}
+rm(list=ls()) # clears your working directory
+getwd() # tells you your current working directory
+setwd("/Users/jmckinla/Library/CloudStorage/OneDrive-IndianaUniversity/Lab_files_personal/Manuscripts_USE/Formate consumption") #~/GitHub/Task3") # sets your working directory
+```
+
+## Install packages
+```{r}
+#install.packages("deSolve") # run this first time
+require("deSolve") # installs any dependencies
+```
+
+## Monod function
+```{r}
+mutfun <- function(times, y, parms) {
+  with(as.list(c(y, parms)), { 
+    uRp <- uMax*((CO2/(Kc+CO2))*(XH/(Kx+XH))*(For/(KF+For))) # Rp growth rate (h^-1)
+    dCO2dt <- uRp*Rp/Yf - uRp*Rp/Yc # change in CO2 concentration (mM/h)
+    dFdt <- -uRp*Rp/Yf # change in formate concentration (mM/h)
+    dXdt <- uRp*Rp/Yf - uRp*Rp/Yx # change in reductant (e.g., NAD(P)H) concentration (mM/h)
+    dRpdt <- uRp*Rp   # change in R. palustris cell density (cells/ml/h)
+    return(list(c(dCO2dt, dFdt, dXdt, dRpdt))) 
+  })
+}
+```
+## Parameters and initial conditions
+```{r}
+# Parameters
+parms <- c(
+           uMax = 0.019, # R. palustris EIB max growth rate on formate alone w NH4Cl (h^-1); max growth rate for WT with formate + NaHCO3 is 0.0038 h^-1
+
+           Yc = 4.8*10^7, # cells/umol CO2
+#set lower boundary to be equal to formate yield because all CO2 has to come from formate and electrons will be limiting
+# use these Yc values (*10^7) to alter the Formate oxidation rate : CO2 fixation rate by:
+           #4.8 = 1.72X, 4.4 = 1.57X, 3.7 = 1.32 X, 2.8 = 1X
+           #4.83*10^7 cell/umol is the parent R. palustris growth yield on NaHCO3 (CO2) with thiosulfate
+
+           Yf = 2.8*10^7, # cells/umol formate (from R. palustris cultures with 20mM formate + 20 mM NaHCO3)
+
+           Yx = 1.12*10^8, # cells per umol XH (NADPH)
+#From McKinlay and Harwood 2010 PNAS, net of 14,270 umol XH used g cells; 625 mg/L/OD from McKinlay et al 2014 JBC -> 14270 umol/g x 0.625 g/L/OD = 8919 umol/L/OD ; 1 OD = 10^12 cells/L/OD; 10^12 cells/L/OD div by 8919 umol XH/L/OD = 1.12*10^8
+
+           Kc = 0.067, # (mM); half saturation constant for CO2 (BRENDA; Witzel, F.; Goetze, J.; Ebenhoeh, O. Slow deactivation of ribulose 1,5-bisphosphate carboxylase/oxygenase elucidated by mathematical models (2010), FEBS J., 277, 931-950
+
+           Kx = 0.0001, # (mM) set arbitrarily low to assume a saturating availability within the cell
+
+           KF = 0.26) # (mM) half saturation constant for formate;  EC 1.17.1.9; Yoch, D.C.; Lindstrom, E.S. Nicotinamide adenine dinucleotide-dependent formate dehydrogenase from Rhodopseudomonas palustris (1969), Arch. Mikrobiol., 67, 182-188.
+
+init <- c( 
+          CO2 = 0.02, # (mM); use 0.0000001 for other conditions tested 
+          For = 20, # (mM)
+          XH = 0.1, # (mM)
+          Rp = 13000000) # R. palustris (cells/ml)
+          # Time range and time step
+Tmax = 2400 # hours
+TimeStep = 1 #hours
+Time = seq(0, Tmax, by = TimeStep)
+```
+
+## Output
+```{r}
+out <-  ode(y = init, times = Time, func = mutfun, parms = parms, method = "lsode")
+#head(out) # prints first 6 time points
+tail(out) # prints last 6 time points
+write.csv(out, file = "out.csv") # creates comma-delimited file that can be pasted into spreadsheet for graphing
+```
+
+## Plotting - not used to generate figures; use as a quick check of trends
+```{r}
+plot(out[,1], out[,5], xlab = "time (hr)", ylab = "Rp", type = "l", las = 1, 
+     col = "purple", lwd = 4, ylim = c(0, 1*max(out[,5]))) # plot Rp biomass
+
+par(new=T)
+plot(out[,1], out[,2], xlab="", ylab ="", type = "l",las = 1,
+     col = "black", ylim=c(0,1.2*max(out[,2])) )
+axis(4, ylim=c(0,1.2*max(out[,2])), lwd=2, line=3.5)
+mtext(4, text="CO2", line=5.5) # plot CO2 (mM)
+
+par(new=T)
+plot(out[,1], out[,3], xlab="", ylab ="",  type = "l",las = 1,
+     col = "blue", ylim=c(0,1.3*max(out[,3])) )
+axis(4, ylim=c(0,1.2*max(out[,3])), lwd = 4, line=4.5)
+mtext(4, text="For", line=6.5) # plot For
+
+par(new=T)
+plot(out[,1], out[,4], xlab="", ylab ="",  type = "l",las = 1,
+     col = "grey", ylim=c(0,1.3*max(out[,4])) )
+axis(4, ylim=c(0,1.2*max(out[,4])), lwd = 4, line=4.5)
+mtext(4, text="For", line=6.5) # plot XH
+
+```
