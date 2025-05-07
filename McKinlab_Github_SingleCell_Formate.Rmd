@@ -1,0 +1,142 @@
+---
+title: "McKinlab_Github_Monod_RpalFormate_2025_05.Rmd"
+output: html_document
+date: "2025-05-05"
+author: "James 'Jake' B. McKinlay"
+---
+
+## Overview
+Single cell Michaelis-Menten model to test factors that permit retention and accumulation of CO2 derived from formate as the source of carbon.
+More information is available at bioRxiv: https://www.biorxiv.org/content/10.1101/2025.05.05.652280v1
+
+
+## Set working directory
+```{r}
+rm(list=ls()) # clears your working directory
+getwd() # tells you your current working directory
+setwd("/Users/jmckinla/Library/CloudStorage/OneDrive-IndianaUniversity/Lab_files_personal/Manuscripts_USE/Formate consumption") #~/GitHub/Task3") # sets your working directory
+```
+
+## Install packages
+```{r}
+#install.packages("deSolve") # run this first time
+require("deSolve") # installs any dependencies
+```
+
+## Single cell function
+```{r}
+mutfun <- function(times, y, parms) {
+  with(as.list(c(y, parms)), { 
+    vCBB <- vCBBMax*(CO2/(Kc+CO2))*(XH/(Kx+XH)) # Calvin cycle rate (mM CO2 used/h)
+    vFDH <- vFDHMax*(For/(KF+For))*(1-(XH/(Kx+XH))) # FDH rate (mM For used/h)
+    vPig = vPigMax*(Pre/(Pre+Kp))*(XH/(XH+Kx)) # pigment synthesis rate (mM CO2 made/h); combines bacteriochlorophyl and carotenoids
+    vCAc = Rf*vCAMax*(CO2/(kCA + CO2))*(pH-(Bic/CO2)) + Rf*vSMax*(pH-(Bic/CO2)) # CO2-using carbonic anhydrase rate + spontaneous intracellular conversion of CO2 to bicarbonate (mM CO2 used/h)
+    vCAb = vCAMax*(Bic/(kCA + Bic))*(pH-(Bic/CO2)) + vSMax*(pH-(Bic/CO2)) #bicarbonate-using carbonic anhydrase rate + spontaneous intracelullar conversion of bicarbonate to CO2 (mM CO2 made/h)
+    vSc = Rf*vSMax*(8-(Bo/Co)) #Spontaneous extracellular conversion of CO2 to bicarbonate (mM CO2 used/h)
+    vSb = vSMax*(8-(Bo/Co)) #Spontaneous extracellular conversion of bicarbonate to CO2 (mM CO2 made/h)
+    dCO2dt <- -vCBB + vFDH + vPig - (CO2-Co)*Perm*SA/V - vCAc*CO2 + vCAb*Bic # change in CO2 concentration (mM/h)
+    dFdt <-  -vFDH + vFDH # change in formate concentration (mM/h); the use of +vFDH adds what is removed at each time step to keep the pool constant; remove vFDH to allow formate levels to decrease over time 
+    dXdt <- -vCBB + vFDH -vPig*10/18 # change in reductant concentration (e.g., NAD(P)H; mM/h); 10/18 adjusts for the stoichiometric relationship of 10 XH oxidized per 18 CO2 produced for each BChl molecule; vPigMax is based on CO2 produced
+    dRdt <- vCBB -R   # reports CBB cycle activity
+    dFDHdt <- vFDH - FDH # reports FDH activity
+    dPredt <- -vPig*4/18 # change in precursor concentration (mM/h); 4/18 adjusts for the stoichiometric relationship of 4 of each precursor molecules oxidized per 18 CO2 produced for each BChl molecule; this relationship can be 4 or 8 depending on the precursor so simulated precursor demand could vary by 2-fold; vPigMax is based on CO2 produced
+    dBicdt <- vCAc*CO2 - vCAb*Bic # change in intracellular bicarbonate concentration (mM/h)
+    dCodt <- (CO2-Co)*Perm*SA/V*Popn/Diln -vSc*Co + vSb*Bo # change in extracellular CO2 concentration (mM/h);
+    dBodt <- vSc*Co - vSb*Bo # change in extracellular bicarbonate concentration (mM/h);
+    return(list(c(dCO2dt, dFdt, dXdt, dRdt, dFDHdt,  dPredt, dBicdt, dCodt, dBodt))) 
+  })
+}
+```
+
+## Parameters and initial conditions
+```{r}
+# Parameters
+parms <- c(
+          vCBBMax = 938, # max CBB cycle rate (mM/h); determined for EIB w CO2; use 137 for WT w NaHCO3; For an EIB growth rate of 0.019 h-1; the doubling time is ln(2)/0.019 = 36.48 h; assume a growth yield of 4.83x10^7 cells/umol CO2; 1 / 4.83x10^7 / 36.48 = 5.68x10^-10 umol CO2/cell/h; divide by single cell volume of 6.05x10^-16L = 938 mM/cell/h; for WT, use max growth rate with formate + NaHCO3 of 0.0038 h^-1
+          vFDHMax = 1618, # max FDH rate (mM/h); use the same calculation as for vCBBMax but using the growth yield for EIB on formate with NaHCO3 (formate limiting; 2.8x10^7 cells/umol)
+          vPigMax = 0.64, # max pigment synthesis rate (mM/h); Maximum CO2 production rate from pigment synthesis, 
+#CO2 from BChl (mM; 1 cell x 5x10^-20 mol BChl/cell (Kirchman and Hanson, 2013, Env Microbiol Rep) x 10-times more BChl in anaerobic phototrophs than aerobic x 18 CO2 per BChl) + CO2 from carotenoids (mM; BChl value x 0.65 caroteinoids/BChl (Hunter et al, 1988, Biochem) x 4/18 CO2)  x growth rate of the strain of interest on formate with NaHCO3; 0.466 mM h-1 applies to EIB without NaHCO3; 0.093 mM h-1 applies to WT wit formate + NaHCO3
+          vCAMax = 6.12*10^9, # Maximum carbonic anhydrase rate; Neisseria gonorrhoeae (h^-1); (BRENDA; Elleby et al, 2001, Eur J Biochem)
+          vSMax = 130, # Spontaneous conversion of CO2 and NaHCO3 (h^-1); (Johnson, 1982, Limno Oceanogr) 
+           Kc = 0.067, # Rubisco half saturation constant for CO2 (mM; BRENDA; Witzel et al, 2010, FEBS J)
+           Kx = 0.01, # assumed (mM)
+           KF = 0.26, # Rp FDH half saturation constant for formate EC 1.17.1.9; (Yoch and Lindstrom, 1969, Arch. Mikrobiol)
+           Kfo = 0.01, #set arbitrarily low to assume a saturating availability within the cell (mM)
+           Kp = 0.01, # assumed (mM)
+           kCA = 20, # Carbonic anhydrase half-saturation constant (Km) for CO2; Neisseria gonorrhoeae (mM) (BRENDA; Chirica et al, 1997, Eur J Biochem)
+           Rf = 100, # CA scaling factor; use 100 to get ~8:1 ratio of intracellular HCO3-:CO2; use 1200 to get ~40:1
+           pH = 8, # pH upper limit; use in combination with Rf to arrive at desired intracellular HCO3-:CO2; use 100 to get to ~8:1; use 1000 to get ~40:1
+           Perm = 0.000000034,# membrane permeability (cm/h)
+           # use 360 for a single cholesterol-rich membrane (Itel et al, 2012, FASEB J)
+           # use 36 for a carboxysome (Sarkar et al, 2024, PNAS)
+           # for multiple chromatophore membranes, assume each bilayer is made of C18 fatty acids (McKinlay et al, 2024, J Biol Chem), that each membrane decreases the permeability coefficient by a factor of 0.037 (1.5-fold decrease /2C; Frallicciardi et al, 2022, Nat Commun), and that 1 membrane layer has a permeability of 360 cm/h (R. palustris has hopanoid-rich membranes) such that:
+            # 4 membranes = 6.7*10^-4 cm/h
+            # 5 membranes = 2.5*10^-5 cm/h
+            # 6 membranes = 9.2*10^-7 cm/h
+            # 7 membranes = 3.4*10^-8 cm/h
+           SA = 5.1e-8, # R. palustris surface area (5.1e-8 cm^2; based on a 3.25 um cell length; LaSarre, 2018, mBio, Fig 3F)
+           V = 6.05*10^-13, # Volume for a 3.25 µm long R. palustris cell (cm^3; LaSarre, 2018, mBio)
+         Popn = 13*10^6, # typical initial R. palustris population (cells/ml); assume extracellular culture volume is 1 ml
+         Diln = 1.65*10^12) # dilution factor going from intracellular volume to 1 ml of culture 
+
+init <- c( 
+          CO2 = 0.0000001, # initial intracellular CO2 concentration (mM)  
+          For = 10, # initial intracellular formate concentration (mM)
+          XH = 2, # initial intracellular reductant concentration (mM)
+          R = 0, # initial CBB cycle rate (mM/h); included for reporting purposes
+          FDH =0, # initial FDH cycle rate (mM/h); included for reporting purposes
+          Pre = 1, # initial intracellular precursor concentration (mM)
+          Bic= 0.0000008, # initial intracellular bicarbonate concentration (mM); adjust as necessary for pH
+          Co = 0.0000001, # initial extracellular CO2 concentration (mM)
+          Bo = 0.0000008) # initial extracellular bicarbonate concentration (mM); adjust as necessary for pH
+
+# Time range and time step
+Tmax = 180 # hours, set to doubling time of WT with formate and NaHCO3 (longest doubling time)
+TimeStep = 1 #hours
+Time = seq(0, Tmax, by = TimeStep)
+```
+
+## Output
+```{r}
+out <-  ode(y = init, times = Time, func = mutfun, parms = parms, method = "lsode")
+head(out) # prints first 6 time points
+tail(out) # prints last 6 time points
+write.csv(out, file = "out.csv") # creates comma-delimited file that can be pasted into spreadsheet for graphing
+```
+
+## Plotting
+```{r}
+plot(out[,1], out[,5], xlab = "time (hr)", ylab = "Rp", type = "l", las = 1, 
+     col = "purple", lwd = 4, ylim = c(0, 1*max(out[,5]))) # plot Rubisco rate
+
+par(new=T)
+plot(out[,1], out[,2], xlab="", ylab ="", type = "l",las = 1,
+     col = "black", ylim=c(0,1.2*max(out[,2])) )
+axis(4, ylim=c(0,1.2*max(out[,2])), lwd=2, line=3.5)
+mtext(4, text="CO2", line=5.5) # plot CO2 (mM)
+
+par(new=T)
+plot(out[,1], out[,3], xlab="", ylab ="",  type = "l",las = 1,
+     col = "blue", ylim=c(0,1.3*max(out[,3])) )
+axis(4, ylim=c(0,1.2*max(out[,3])), lwd = 4, line=4.5)
+mtext(4, text="For", line=6.5) # plot For
+
+par(new=T)
+plot(out[,1], out[,4], xlab="", ylab ="",  type = "l",las = 1,
+     col = "grey", ylim=c(0,1.3*max(out[,4])) )
+axis(4, ylim=c(0,1.2*max(out[,4])), lwd = 4, line=4.5)
+mtext(4, text="For", line=6.5) # plot XH
+
+par(new=T)
+plot(out[,1], out[,6], xlab="", ylab ="",  type = "l",las = 1,
+     col = "cyan", ylim=c(0,1.3*max(out[,6])) )
+axis(4, ylim=c(0,1.2*max(out[,6])), lwd = 6, line=6.5)
+mtext(4, text="For", line=8.5) # plot uFDH
+
+par(new=T)
+plot(out[,1], out[,7], xlab="", ylab ="",  type = "l",las = 1,
+     col = "green", ylim=c(0,1.3*max(out[,7])) )
+axis(4, ylim=c(0,1.2*max(out[,7])), lwd = 6, line=6.5)
+mtext(4, text="For", line=8.5) # plot precursors
+
+```
